@@ -35,17 +35,26 @@ public class AuthorizationController {
     @PostMapping("/authorize")
     public ResponseEntity<AuthorizationResponse> authorize(@Valid @RequestBody AuthorizationRequest request) {
         String identifier = request.getDriverIdentifier().getId();
-        if (identifier.length() < 20 || identifier.length() > 80) {
+        if (isInvalidDriverIdentifier(identifier)) {
             log.warn("Invalid identifier length: {}", identifier);
             return ResponseEntity.ok(new AuthorizationResponse("Invalid"));
         }
 
+        return handleKafkaAuthorization(request);
+    }
+
+    private boolean isInvalidDriverIdentifier(String identifier) {
+        return identifier.length() < 20 || identifier.length() > 80;
+    }
+
+    private ResponseEntity<AuthorizationResponse> handleKafkaAuthorization(AuthorizationRequest request) {
         String correlationId = UUID.randomUUID().toString();
+        String identifier = request.getDriverIdentifier().getId();
+
         log.info("Processing request. correlationId={}, identifier={}", correlationId, identifier);
+
         AuthorizationKafkaRequest kafkaRequest = new AuthorizationKafkaRequest(
-                correlationId,
-                request.getStationUuid(),
-                identifier
+                correlationId, request.getStationUuid(), identifier
         );
 
         CompletableFuture<String> future = new CompletableFuture<>();
@@ -53,22 +62,24 @@ public class AuthorizationController {
         producer.sendAuthorizationRequest(kafkaRequest);
 
         try {
-            String status = future.get(responseTimeoutMs, TimeUnit.SECONDS); // timeout
+            String status = future.get(responseTimeoutMs, TimeUnit.MILLISECONDS);
             log.info("Returning response. correlationId={}, status={}", correlationId, status);
             return ResponseEntity.ok(new AuthorizationResponse(status));
         } catch (TimeoutException e) {
-            responseManager.remove(correlationId); // cleanup
             log.warn("Timeout occurred for correlationId={}", correlationId);
-            return ResponseEntity.status(504).body(new AuthorizationResponse("Timeout"));
+            return respondAndCleanup(correlationId, 504, "Timeout");
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt(); // re-interrupt
-            responseManager.remove(correlationId); // cleanup
-            log.error("Interrupted while waiting for response. correlationId={}", correlationId, e);
-            return ResponseEntity.status(500).body(new AuthorizationResponse("Interrupted"));
+            Thread.currentThread().interrupt();
+            log.error("Interrupted while waiting. correlationId={}", correlationId, e);
+            return respondAndCleanup(correlationId, 500, "Interrupted");
         } catch (Exception e) {
-            responseManager.remove(correlationId); // cleanup
-            log.error("Unexpected error while processing correlationId={}", correlationId, e);
-            return ResponseEntity.status(500).body(new AuthorizationResponse("InternalError"));
+            log.error("Unexpected error. correlationId={}", correlationId, e);
+            return respondAndCleanup(correlationId, 500, "InternalError");
         }
+    }
+
+    private ResponseEntity<AuthorizationResponse> respondAndCleanup(String correlationId, int status, String message) {
+        responseManager.remove(correlationId);
+        return ResponseEntity.status(status).body(new AuthorizationResponse(message));
     }
 }
