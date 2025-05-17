@@ -13,3 +13,4 @@ spring:
 
 app:
   response-timeout-ms: 3000
+  future-expiration-ms: 300000 # Time after which future entries are considered stale (5 minutes)

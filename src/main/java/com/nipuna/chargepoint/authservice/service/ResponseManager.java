@@ -3,6 +3,7 @@ package com.nipuna.chargepoint.authservice.service;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.Iterator;
@@ -18,9 +19,9 @@ import java.util.concurrent.TimeUnit;
 public class ResponseManager {
     private final Map<String, TimedFuture> futureMap = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-
-    // Time after which entries are considered stale (eg: 5 minutes)
-    private static final long EXPIRATION_MS = 5 * 60 * 1000L;
+    
+    @Value("${app.future-expiration-ms:300000}")
+    private long expirationMs;
 
     public void register(String correlationId, CompletableFuture<String> future) {
         futureMap.put(correlationId, new TimedFuture(future));
@@ -51,7 +52,7 @@ public class ResponseManager {
         Iterator<Map.Entry<String, TimedFuture>> iterator = futureMap.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<String, TimedFuture> entry = iterator.next();
-            if (now - entry.getValue().getTimestamp() > EXPIRATION_MS) {
+            if (now - entry.getValue().getTimestamp() > expirationMs) {
                 entry.getValue().getFuture().complete("Expired");
                 iterator.remove();
                 removed++;
