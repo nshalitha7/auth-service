@@ -52,8 +52,7 @@ public class AuthorizationConsumer {
 
     @KafkaListener(
             topics = "auth-responses",
-            groupId = "auth-service-group",
-            containerFactory = "authResponseContainerFactory"
+            groupId = "auth-service-group"
     )
     public void handleAuthorizationResponse(AuthorizationKafkaResponse response) {
         String correlationId = response.getCorrelationId();
