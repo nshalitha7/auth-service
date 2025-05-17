@@ -1,5 +1,6 @@
 package com.nipuna.chargepoint.authservice.kafka;
 
+import com.nipuna.chargepoint.authservice.service.ResponseManager;
 import com.nipuna.chargepoint.authservice.service.WhitelistStore;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -12,6 +13,7 @@ public class AuthorizationConsumer {
 
     private final WhitelistStore whitelistStore;
     private final KafkaTemplate<String, AuthorizationKafkaResponse> kafkaTemplate;
+    private final ResponseManager responseManager;
 
     @KafkaListener(topics = "auth-requests", groupId = "auth-service-group", containerFactory = "authRequestContainerFactory")
     public void handleAuthorizationRequest(AuthorizationKafkaRequest request) {
@@ -27,5 +29,10 @@ public class AuthorizationConsumer {
 
         AuthorizationKafkaResponse response = new AuthorizationKafkaResponse(request.getCorrelationId(), result);
         kafkaTemplate.send("auth-responses", request.getCorrelationId(), response);
+    }
+
+    @KafkaListener(topics = "auth-responses", groupId = "auth-service-group")
+    public void handleAuthorizationResponse(AuthorizationKafkaResponse response) {
+        responseManager.complete(response.getCorrelationId(), response.getAuthorizationStatus());
     }
 }
