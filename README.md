@@ -1,4 +1,4 @@
-# ChargePoint Authorization Service
+# Authorization Service
 
 Java 21 + Spring Boot 3 application, that simulates an asynchronous RFID-based eDriver authorization system
 using Kafka.
